@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Network resource
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - pro
+      - stg
+  ServiceName:
+    Type: String
+    Default: sinatra-on-fargate
+  AvailabilityZone:
+    Type: String
+    Default: ap-northeast-1a
+
+Resources:
+  ############### VPC ###############
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-vpc"
+
+  ############### Internet Gateway ###############
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-igw"
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+
+  ############### Subnet ###############
+  PrivateSubnet1A:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Ref: AvailabilityZone
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-private-subnet-1a"
+  PrivateSubnet1C:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.2.0/24
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Ref: AvailabilityZone
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-private-subnet-1c"
+  PublicSubnet1A:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.3.0/24
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Ref: AvailabilityZone
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-public-subnet-1a"
+  PublicSubnet1C:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.4.0/24
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Ref: AvailabilityZone
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-public-subnet-1c"
+
+  ############### Route Table ###############
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-private-rtb"
+  PrivateSubnetRouteTableAssociation1a:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1A
+  PrivateSubnetRouteTableAssociation1c:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1C
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-public-rtb"
+  PublicRoute:
+    Type: AWS::EC2::Route
+    # DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnetRouteTableAssociation1a:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1A
+  PublicSubnetRouteTableAssociation1c:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1C
+
+  ############### Security Group ###############
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ServiceName}-${Environment}-alb-sg"
+      GroupDescription: "ALB Security Group"
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: from 0.0.0.0/0:80
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: from 0.0.0.0/0:443
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-alb-sg"
+
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ServiceName}-${Environment}-web-sg"
+      GroupDescription: "Web Security Group"
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-web-sg"
+  WebSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      GroupId: !Ref WebSecurityGroup
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Description: http from ALB
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ServiceName}-${Environment}-db-sg"
+      GroupDescription: "DB Security Group"
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ServiceName}-${Environment}-db-sg"
+  DBSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      GroupId: !Ref DBSecurityGroup
+      SourceSecurityGroupId: !Ref WebSecurityGroup
+      Description: MySQL from Web
+
+Outputs:
+  Vpc:
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub "Vpc-${Environment}"
+  PrivateSubnet1A:
+    Value: !Ref PrivateSubnet1A
+    Export:
+      Name: !Sub "PrivateSubnet1A-${Environment}"
+  PrivateSubnet1C:
+    Value: !Ref PrivateSubnet1C
+    Export:
+      Name: !Sub "PrivateSubnet1C-${Environment}"
+  PublicSubnet1A:
+    Value: !Ref PublicSubnet1A
+    Export:
+      Name: !Sub "PublicSubnet1A-${Environment}"
+  PublicSubnet1C:
+    Value: !Ref PublicSubnet1C
+    Export:
+      Name: !Sub "PublicSubnet1C-${Environment}"
+  ALBSecurityGroup:
+    Value: !Ref ALBSecurityGroup
+    Export:
+      Name: !Sub "ALBSecurityGroup-${Environment}"
+  WebSecurityGroup:
+    Value: !Ref WebSecurityGroup
+    Export:
+      Name: !Sub "WebSecurityGroup-${Environment}"
+  DBSecurityGroup:
+    Value: !Ref DBSecurityGroup
+    Export:
+      Name: !Sub "DBSecurityGroup-${Environment}"
