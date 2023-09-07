@@ -5,6 +5,7 @@ services:
       dockerfile: ./docker/web/Dockerfile
     volumes:
       - tmp:/var/www/sof/tmp
+      - .:/var/www/sof
   nginx:
     build:
       context: .
