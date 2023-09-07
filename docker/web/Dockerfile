@@ -10,6 +10,6 @@ RUN gem install bundler && bundle install
 COPY . $APP_HOME
 RUN mkdir -p tmp/pids tmp/sockets log
 
-CMD ["bundle", "exec", "unicorn", "-c", "unicorn.conf.rb"]
+VOLUME $APP_HOME/tmp
 
-EXPOSE 8080
+CMD ["bundle", "exec", "unicorn", "-c", "unicorn.conf.rb"]
